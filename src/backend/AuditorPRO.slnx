@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="AuditorPRO.Api/AuditorPRO.Api.csproj" />
+  <Project Path="AuditorPRO.Application/AuditorPRO.Application.csproj" />
+  <Project Path="AuditorPRO.Domain/AuditorPRO.Domain.csproj" />
+  <Project Path="AuditorPRO.Infrastructure/AuditorPRO.Infrastructure.csproj" />
+</Solution>

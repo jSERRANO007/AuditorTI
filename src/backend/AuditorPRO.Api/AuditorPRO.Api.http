@@ -1,0 +1,6 @@
+@AuditorPRO.Api_HostAddress = http://localhost:5105
+
+GET {{AuditorPRO.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

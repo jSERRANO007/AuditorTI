@@ -1,0 +1,28 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+appsettings.Development.json
+appsettings.Local.json
+
+# Node / Frontend
+node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+
+# Azure
+.azure/
+*.pubxml
+*.pubxml.user
+
+# IDEs
+.idea/
+.vscode/settings.json
+*.DS_Store
+
+# Packages
+*.nupkg
