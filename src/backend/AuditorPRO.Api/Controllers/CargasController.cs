@@ -218,17 +218,19 @@ public class CargasController : ControllerBase
 
     [HttpPost("sap-roles")]
     [RequestSizeLimit(52_428_800)] // 50 MB
+    [RequestFormLimits(MultipartBodyLengthLimit = 52_428_800)]
     public async Task<IActionResult> CargarRolesSAP(
         [FromForm] IFormFile archivo,
         [FromForm] string sistema,
         CancellationToken ct)
     {
-        var cmd = new CargarRolesSAPCommand(
-            archivo.OpenReadStream(),
-            archivo.FileName,
-            archivo.ContentType,
-            sistema
-        );
+        // Leer el archivo en memoria antes de procesar para evitar que el stream
+        // se cierre durante operaciones async de larga duración (15k+ filas)
+        using var ms = new MemoryStream();
+        await archivo.CopyToAsync(ms, ct);
+        ms.Position = 0;
+
+        var cmd = new CargarRolesSAPCommand(ms, archivo.FileName, archivo.ContentType, sistema);
         var resultado = await _mediator.Send(cmd, ct);
         return Ok(resultado);
     }

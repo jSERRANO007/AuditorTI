@@ -308,8 +308,9 @@ public class CargarRolesSAPHandler : IRequestHandler<CargarRolesSAPCommand, Carg
     {
         var filas = ParseExcel(request.Contenido);
         var resultado = new CargaResultado { TotalRegistros = filas.Count };
+        const int BATCH = 500; // filas por SaveChanges — evita acumular 15k entidades en memoria
 
-        // Cachés para evitar consultas repetidas
+        // ── Cargar existentes (tracked por EF → cambios detectados automáticamente) ──
         var usuarios = (await _usuarioRepo.FindAsync(u => u.Sistema == request.Sistema, ct))
             .ToDictionary(u => u.NombreUsuario.ToUpper());
         var roles = (await _rolRepo.FindAsync(r => r.Sistema == request.Sistema, ct))
@@ -318,9 +319,13 @@ public class CargarRolesSAPHandler : IRequestHandler<CargarRolesSAPCommand, Carg
             .GroupBy(a => a.UsuarioId)
             .ToDictionary(g => g.Key, g => g.Select(a => a.RolId).ToHashSet());
 
-        // ── PASADA 1: upsert usuarios y roles ────────────────────────────────
-        // Se guardan primero para que los IDs existan en BD antes de crear FKs
+        // ── PASADA 1: upsert UsuarioSistema + RolSistema ─────────────────────
+        // IMPORTANTE: nunca llamar UpdateAsync sobre entidades en estado "Added" —
+        // _dbSet.Update() cambiaría el estado a "Modified" y el INSERT fallaría (0 rows).
+        // Solución: solo modificar propiedades directamente; EF change tracker detecta
+        // el estado Modified automáticamente para entidades cargadas desde la BD.
         var pendientesAsign = new List<(UsuarioSistema usr, RolSistema rol, FilaRolSAP fila)>();
+        int pendientesBatch = 0;
 
         foreach (var (fila, idx) in filas.Select((f, i) => (f, i + 2)))
         {
@@ -333,54 +338,54 @@ public class CargarRolesSAPHandler : IRequestHandler<CargarRolesSAPCommand, Carg
                     continue;
                 }
 
-                // 1. Upsert UsuarioSistema
+                // 1. Upsert UsuarioSistema — solo modificar propiedades, sin UpdateAsync
                 if (!usuarios.TryGetValue(fila.UsuarioSAP.ToUpper(), out var usr))
                 {
                     usr = new UsuarioSistema
                     {
-                        Sistema        = request.Sistema,
-                        NombreUsuario  = fila.UsuarioSAP.ToUpper(),
-                        Cedula         = fila.Cedula,
-                        NombreCompleto = fila.NombreCompleto,
-                        Sociedad       = fila.Sociedad,
-                        Departamento   = fila.Departamento,
-                        Puesto         = fila.Puesto,
-                        Email          = fila.Email,
-                        Estado         = fila.Estado,
-                        TipoUsuario    = fila.TipoUsuario,
+                        Sistema           = request.Sistema,
+                        NombreUsuario     = fila.UsuarioSAP.ToUpper(),
+                        Cedula            = fila.Cedula,
+                        NombreCompleto    = fila.NombreCompleto,
+                        Sociedad          = fila.Sociedad,
+                        Departamento      = fila.Departamento,
+                        Puesto            = fila.Puesto,
+                        Email             = fila.Email,
+                        Estado            = fila.Estado,
+                        TipoUsuario       = fila.TipoUsuario,
                         FechaUltimoAcceso = fila.UltimoIngreso,
-                        CreatedBy      = _user.Email
+                        CreatedBy         = _user.Email
                     };
-                    await _usuarioRepo.AddAsync(usr, ct);
+                    await _usuarioRepo.AddAsync(usr, ct); // estado: Added → no llamar Update
                     usuarios[fila.UsuarioSAP.ToUpper()] = usr;
                 }
                 else
                 {
-                    usr.Cedula         = fila.Cedula ?? usr.Cedula;
-                    usr.NombreCompleto = fila.NombreCompleto ?? usr.NombreCompleto;
-                    usr.Sociedad       = fila.Sociedad ?? usr.Sociedad;
-                    usr.Departamento   = fila.Departamento ?? usr.Departamento;
-                    usr.Puesto         = fila.Puesto ?? usr.Puesto;
-                    usr.Email          = fila.Email ?? usr.Email;
-                    usr.Estado         = fila.Estado;
-                    usr.TipoUsuario    = fila.TipoUsuario;
+                    // Modificar propiedades directamente: EF detecta "Modified" al SaveChanges
+                    if (!string.IsNullOrWhiteSpace(fila.Cedula))         usr.Cedula         = fila.Cedula;
+                    if (!string.IsNullOrWhiteSpace(fila.NombreCompleto)) usr.NombreCompleto = fila.NombreCompleto;
+                    if (!string.IsNullOrWhiteSpace(fila.Sociedad))       usr.Sociedad       = fila.Sociedad;
+                    if (!string.IsNullOrWhiteSpace(fila.Departamento))   usr.Departamento   = fila.Departamento;
+                    if (!string.IsNullOrWhiteSpace(fila.Puesto))         usr.Puesto         = fila.Puesto;
+                    if (!string.IsNullOrWhiteSpace(fila.Email))          usr.Email          = fila.Email;
+                    usr.Estado     = fila.Estado;
+                    usr.TipoUsuario = fila.TipoUsuario;
                     if (fila.UltimoIngreso.HasValue) usr.FechaUltimoAcceso = fila.UltimoIngreso;
-                    usr.UpdatedAt      = DateTime.UtcNow;
-                    await _usuarioRepo.UpdateAsync(usr, ct);
+                    usr.UpdatedAt  = DateTime.UtcNow;
                 }
 
                 if (string.IsNullOrWhiteSpace(fila.Rol)) continue;
 
-                // 2. Upsert RolSistema
+                // 2. Upsert RolSistema — igual, solo modificar propiedades
                 if (!roles.TryGetValue(fila.Rol.ToUpper(), out var rol))
                 {
                     rol = new RolSistema
                     {
-                        Sistema    = request.Sistema,
-                        NombreRol  = fila.Rol.ToUpper(),
-                        Descripcion = fila.DescripcionRol,
-                        NivelRiesgo = fila.NivelRiesgo,
-                        EsCritico   = fila.EsCritico,
+                        Sistema                  = request.Sistema,
+                        NombreRol                = fila.Rol.ToUpper(),
+                        Descripcion              = fila.DescripcionRol,
+                        NivelRiesgo              = fila.NivelRiesgo,
+                        EsCritico                = fila.EsCritico,
                         TransaccionesAutorizadas = fila.Transacciones,
                     };
                     await _rolRepo.AddAsync(rol, ct);
@@ -388,15 +393,24 @@ public class CargarRolesSAPHandler : IRequestHandler<CargarRolesSAPCommand, Carg
                 }
                 else
                 {
-                    if (!string.IsNullOrWhiteSpace(fila.Transacciones))
-                        rol.TransaccionesAutorizadas = fila.Transacciones;
-                    if (!string.IsNullOrWhiteSpace(fila.DescripcionRol))
-                        rol.Descripcion = fila.DescripcionRol;
+                    if (!string.IsNullOrWhiteSpace(fila.Transacciones))  rol.TransaccionesAutorizadas = fila.Transacciones;
+                    if (!string.IsNullOrWhiteSpace(fila.DescripcionRol)) rol.Descripcion = fila.DescripcionRol;
                     if (fila.EsCritico) rol.EsCritico = true;
-                    await _rolRepo.UpdateAsync(rol, ct);
                 }
 
                 pendientesAsign.Add((usr, rol, fila));
+                pendientesBatch++;
+
+                // Guardar en lotes de BATCH filas para manejar 15.000+ registros
+                if (pendientesBatch >= BATCH)
+                {
+                    try { await _usuarioRepo.SaveChangesAsync(ct); pendientesBatch = 0; }
+                    catch (Exception bex)
+                    {
+                        resultado.DetalleErrores.Add($"Error en lote (fila ~{idx}): {bex.InnerException?.Message ?? bex.Message}");
+                        pendientesBatch = 0;
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -405,7 +419,7 @@ public class CargarRolesSAPHandler : IRequestHandler<CargarRolesSAPCommand, Carg
             }
         }
 
-        // Guardar usuarios y roles antes de crear las asignaciones (evita FK violation)
+        // Guardar último lote de usuarios/roles
         try { await _usuarioRepo.SaveChangesAsync(ct); }
         catch (Exception ex)
         {
@@ -414,7 +428,9 @@ public class CargarRolesSAPHandler : IRequestHandler<CargarRolesSAPCommand, Carg
             return resultado;
         }
 
-        // ── PASADA 2: asignaciones rol-usuario ───────────────────────────────
+        // ── PASADA 2: AsignacionRolUsuario ────────────────────────────────────
+        // Ahora todos los usuarios y roles existen en BD → no habrá FK violation
+        int asignBatch = 0;
         foreach (var (usr, rol, fila) in pendientesAsign)
         {
             try
@@ -422,7 +438,7 @@ public class CargarRolesSAPHandler : IRequestHandler<CargarRolesSAPCommand, Carg
                 var rolesUsuario = asignaciones.GetValueOrDefault(usr.Id) ?? [];
                 if (!rolesUsuario.Contains(rol.Id))
                 {
-                    var asign = new AsignacionRolUsuario
+                    await _asignRepo.AddAsync(new AsignacionRolUsuario
                     {
                         UsuarioId        = usr.Id,
                         RolId            = rol.Id,
@@ -430,12 +446,22 @@ public class CargarRolesSAPHandler : IRequestHandler<CargarRolesSAPCommand, Carg
                         FechaVencimiento = fila.FechaHasta,
                         AsignadoPor      = "CARGA_SAP",
                         Activa           = true
-                    };
-                    await _asignRepo.AddAsync(asign, ct);
+                    }, ct);
                     rolesUsuario.Add(rol.Id);
                     asignaciones[usr.Id] = rolesUsuario;
+                    asignBatch++;
                 }
                 resultado.Insertados++;
+
+                if (asignBatch >= BATCH)
+                {
+                    try { await _asignRepo.SaveChangesAsync(ct); asignBatch = 0; }
+                    catch (Exception bex)
+                    {
+                        resultado.DetalleErrores.Add($"Error lote asignaciones: {bex.InnerException?.Message ?? bex.Message}");
+                        asignBatch = 0;
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -444,13 +470,11 @@ public class CargarRolesSAPHandler : IRequestHandler<CargarRolesSAPCommand, Carg
             }
         }
 
+        // Guardar último lote de asignaciones
         try { await _asignRepo.SaveChangesAsync(ct); }
         catch (Exception ex)
         {
             resultado.DetalleErrores.Insert(0, $"Error al guardar asignaciones: {ex.InnerException?.Message ?? ex.Message}");
-            resultado.Errores += resultado.Insertados;
-            resultado.Insertados = 0;
-            return resultado;
         }
 
         await _audit.LogAsync(_user.UserId, _user.Email, "CARGA_ROLES_SAP", "AsignacionRolUsuario",
