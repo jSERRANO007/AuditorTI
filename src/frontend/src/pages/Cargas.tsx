@@ -1,10 +1,10 @@
-import { useState, useRef, useEffect } from 'react';
-import { cargasApi, type CargaResultado, type SnapshotEntraIDDto } from '../api/cargas';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { cargasApi, type CargaResultado, type SnapshotEntraIDDto, type MatrizPuestoDto } from '../api/cargas';
 import { toast } from 'sonner';
 import {
   Upload, Download, FileSpreadsheet, Users, ShieldCheck,
   CheckCircle2, XCircle, AlertTriangle, RefreshCw, X, LayoutGrid, Briefcase,
-  MonitorSmartphone, Calendar, Hash, DatabaseZap
+  MonitorSmartphone, Calendar, Hash, DatabaseZap, Search, ChevronLeft, ChevronRight, Eye
 } from 'lucide-react';
 
 type TipoCarga = 'empleados' | 'sapRoles' | 'matrizPuestos' | 'casosSeSuite' | 'entraID';
@@ -185,6 +185,175 @@ function ResultadoPanel({ resultado, onClose }: { resultado: CargaResultado; onC
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Visor Matriz de Puestos
+// ─────────────────────────────────────────────────────────────────────────────
+function MatrizVisor({ onRecargar }: { onRecargar?: number }) {
+  const [items, setItems] = useState<MatrizPuestoDto[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [filtros, setFiltros] = useState({ usuario: '', puesto: '', rol: '', transaccion: '' });
+  const [filtrosActivos, setFiltrosActivos] = useState({ usuario: '', puesto: '', rol: '', transaccion: '' });
+  const PAGE_SIZE = 50;
+
+  const cargar = useCallback(async (f = filtrosActivos, p = page) => {
+    setLoading(true);
+    try {
+      const res = await cargasApi.getMatrizPuestos({ ...f, page: p, pageSize: PAGE_SIZE });
+      setItems(res.items);
+      setTotal(res.total);
+    } catch {
+      toast.error('Error al cargar la Matriz de Puestos');
+    } finally {
+      setLoading(false);
+    }
+  }, [filtrosActivos, page]);
+
+  useEffect(() => { cargar(); }, [onRecargar]);
+
+  const buscar = () => {
+    setPage(1);
+    setFiltrosActivos(filtros);
+    cargar(filtros, 1);
+  };
+
+  const limpiar = () => {
+    const vacio = { usuario: '', puesto: '', rol: '', transaccion: '' };
+    setFiltros(vacio);
+    setFiltrosActivos(vacio);
+    setPage(1);
+    cargar(vacio, 1);
+  };
+
+  const totalPaginas = Math.ceil(total / PAGE_SIZE);
+
+  const irPagina = (p: number) => {
+    setPage(p);
+    cargar(filtrosActivos, p);
+  };
+
+  return (
+    <div className="mt-8">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+          <Eye size={15} className="text-violet-600" />
+          Registros cargados
+          {total > 0 && (
+            <span className="bg-violet-100 text-violet-700 text-xs font-semibold px-2 py-0.5 rounded-full">
+              {total.toLocaleString()}
+            </span>
+          )}
+        </h2>
+        <button onClick={() => cargar()} className="flex items-center gap-1 text-xs text-gray-500 hover:text-violet-600 transition">
+          <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> Refrescar
+        </button>
+      </div>
+
+      {/* Filtros */}
+      <div className="grid grid-cols-4 gap-2 mb-3">
+        {[
+          { key: 'usuario', placeholder: 'Usuario / Nombre' },
+          { key: 'puesto',  placeholder: 'Puesto' },
+          { key: 'rol',     placeholder: 'Rol SAP' },
+          { key: 'transaccion', placeholder: 'Transacción' },
+        ].map(({ key, placeholder }) => (
+          <input
+            key={key}
+            value={filtros[key as keyof typeof filtros]}
+            onChange={e => setFiltros(f => ({ ...f, [key]: e.target.value }))}
+            onKeyDown={e => e.key === 'Enter' && buscar()}
+            placeholder={placeholder}
+            className="border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-violet-400"
+          />
+        ))}
+      </div>
+      <div className="flex gap-2 mb-4">
+        <button onClick={buscar}
+          className="flex items-center gap-1.5 bg-violet-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-violet-700 transition">
+          <Search size={12} /> Buscar
+        </button>
+        <button onClick={limpiar}
+          className="text-xs text-gray-500 hover:text-gray-700 transition">
+          Limpiar
+        </button>
+      </div>
+
+      {/* Tabla */}
+      {loading ? (
+        <div className="flex items-center justify-center py-12 text-gray-400 text-sm gap-2">
+          <RefreshCw size={16} className="animate-spin" /> Cargando...
+        </div>
+      ) : items.length === 0 ? (
+        <div className="text-center py-12 text-gray-400 text-sm border border-dashed border-gray-200 rounded-xl">
+          No hay registros. Carga un archivo para comenzar.
+        </div>
+      ) : (
+        <>
+          <div className="border border-gray-200 rounded-xl overflow-auto">
+            <table className="w-full text-xs min-w-[900px]">
+              <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
+                <tr>
+                  {['Usuario', 'Nombre', 'Puesto', 'Departamento', 'Rol', 'Transacción', 'Inicio Validez', 'Fin Validez', 'Último Ingreso'].map(h => (
+                    <th key={h} className="text-left px-3 py-2 font-semibold text-gray-600 whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {items.map((m, i) => (
+                  <tr key={i} className="hover:bg-violet-50 transition-colors">
+                    <td className="px-3 py-2 font-mono font-medium text-violet-700">{m.usuarioSAP}</td>
+                    <td className="px-3 py-2 text-gray-700">{m.nombreCompleto ?? '—'}</td>
+                    <td className="px-3 py-2 text-gray-600">{m.puesto ?? '—'}</td>
+                    <td className="px-3 py-2 text-gray-500">{m.departamento ?? '—'}</td>
+                    <td className="px-3 py-2">
+                      <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-mono text-[11px]">{m.rol}</span>
+                    </td>
+                    <td className="px-3 py-2">
+                      <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-mono text-[11px]">{m.transaccion ?? '—'}</span>
+                    </td>
+                    <td className="px-3 py-2 text-gray-500">{m.inicioValidez ?? '—'}</td>
+                    <td className="px-3 py-2 text-gray-500">{m.finValidez ?? '—'}</td>
+                    <td className="px-3 py-2 text-gray-500">{m.ultimoIngreso ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Paginación */}
+          {totalPaginas > 1 && (
+            <div className="flex items-center justify-between mt-3">
+              <p className="text-xs text-gray-500">
+                Página {page} de {totalPaginas} · {total.toLocaleString()} registros
+              </p>
+              <div className="flex items-center gap-1">
+                <button onClick={() => irPagina(page - 1)} disabled={page === 1}
+                  className="p-1 rounded hover:bg-gray-100 disabled:opacity-30 transition">
+                  <ChevronLeft size={14} />
+                </button>
+                {Array.from({ length: Math.min(5, totalPaginas) }, (_, i) => {
+                  const p = Math.max(1, Math.min(page - 2, totalPaginas - 4)) + i;
+                  return (
+                    <button key={p} onClick={() => irPagina(p)}
+                      className={`w-6 h-6 text-xs rounded transition ${p === page ? 'bg-violet-600 text-white' : 'hover:bg-gray-100 text-gray-600'}`}>
+                      {p}
+                    </button>
+                  );
+                })}
+                <button onClick={() => irPagina(page + 1)} disabled={page === totalPaginas}
+                  className="p-1 rounded hover:bg-gray-100 disabled:opacity-30 transition">
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Page
 // ─────────────────────────────────────────────────────────────────────────────
 const SISTEMAS = ['SAP', 'EVOLUTION', 'SE_SUITE', 'AD', 'OTRO'];
@@ -198,6 +367,7 @@ export function Cargas() {
   const [loadingSnapshots, setLoadingSnapshots] = useState(false);
   const [descargandoId, setDescargandoId] = useState<string | null>(null);
   const [ultimoSnapshot, setUltimoSnapshot] = useState<{ id: string; nombre: string } | null>(null);
+  const [recargarVisor, setRecargarVisor] = useState(0);
   const cfg = TIPO_CONFIG[tipo];
 
   const setFile = (file: File) => setState(s => ({ ...s, file, resultado: null }));
@@ -248,10 +418,12 @@ export function Cargas() {
         tipo === 'matrizPuestos' ? await cargasApi.cargarMatrizPuestos(archivo) :
                                    await cargasApi.cargarCasosSeSuite(archivo);
       setState(s => ({ ...s, resultado, file: null }));
-      if (resultado.errores === 0)
+      if (resultado.errores === 0) {
         toast.success(`Carga completada: ${resultado.insertados} nuevos, ${resultado.actualizados} actualizados`);
-      else
+        if (tipo === 'matrizPuestos') setRecargarVisor(v => v + 1);
+      } else {
         toast.warning(`Carga con errores: ${resultado.errores} filas no procesadas`);
+      }
     } catch {
       toast.error('Error al procesar el archivo');
     } finally {
@@ -429,6 +601,11 @@ export function Cargas() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Visor Matriz de Puestos */}
+      {tipo === 'matrizPuestos' && (
+        <MatrizVisor onRecargar={recargarVisor} />
       )}
 
       {/* Historial de snapshots Entra ID */}

@@ -290,17 +290,33 @@ public class CargasController : ControllerBase
             "plantilla_matriz_puestos.xlsx");
     }
 
+    [HttpGet("matriz-puestos")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetMatrizPuestos(
+        [FromQuery] string? usuario,
+        [FromQuery] string? puesto,
+        [FromQuery] string? rol,
+        [FromQuery] string? transaccion,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken ct = default)
+    {
+        var query = new GetMatrizPuestosQuery(usuario, puesto, rol, transaccion, page, pageSize);
+        var result = await _mediator.Send(query, ct);
+        return Ok(result);
+    }
+
     [HttpPost("matriz-puestos")]
-    [RequestSizeLimit(20_971_520)] // 20 MB
+    [RequestSizeLimit(52_428_800)] // 50 MB
+    [RequestFormLimits(MultipartBodyLengthLimit = 52_428_800)]
     public async Task<IActionResult> CargarMatrizPuestos(
         [FromForm] IFormFile archivo,
         CancellationToken ct)
     {
-        var cmd = new CargarMatrizPuestosCommand(
-            archivo.OpenReadStream(),
-            archivo.FileName,
-            archivo.ContentType
-        );
+        var ms = new MemoryStream();
+        await archivo.CopyToAsync(ms, ct);
+        ms.Position = 0;
+        var cmd = new CargarMatrizPuestosCommand(ms, archivo.FileName, archivo.ContentType);
         var resultado = await _mediator.Send(cmd, ct);
         return Ok(resultado);
     }
@@ -357,16 +373,16 @@ public class CargasController : ControllerBase
     }
 
     [HttpPost("casos-sesuite")]
-    [RequestSizeLimit(20_971_520)] // 20 MB
+    [RequestSizeLimit(52_428_800)] // 50 MB
+    [RequestFormLimits(MultipartBodyLengthLimit = 52_428_800)]
     public async Task<IActionResult> CargarCasosSESuite(
         [FromForm] IFormFile archivo,
         CancellationToken ct)
     {
-        var cmd = new CargarCasosSESuiteCommand(
-            archivo.OpenReadStream(),
-            archivo.FileName,
-            archivo.ContentType
-        );
+        var ms = new MemoryStream();
+        await archivo.CopyToAsync(ms, ct);
+        ms.Position = 0;
+        var cmd = new CargarCasosSESuiteCommand(ms, archivo.FileName, archivo.ContentType);
         var resultado = await _mediator.Send(cmd, ct);
         return Ok(resultado);
     }

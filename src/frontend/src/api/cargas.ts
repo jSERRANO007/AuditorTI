@@ -102,6 +102,13 @@ export const cargasApi = {
     URL.revokeObjectURL(url);
   },
 
+  // ── Visor Matriz de Puestos ───────────────────────────────────────────────
+  getMatrizPuestos: (params: {
+    usuario?: string; puesto?: string; rol?: string; transaccion?: string;
+    page?: number; pageSize?: number;
+  }): Promise<MatrizPuestosResultado> =>
+    api.get('/cargas/matriz-puestos', { params }).then(r => r.data),
+
   // ── Snapshots Entra ID ────────────────────────────────────────────────────
   cargarSnapshotEntraID: (file: File, nombre?: string): Promise<SnapshotEntraIDResultado> => {
     const form = new FormData();
@@ -135,6 +142,29 @@ export const cargasApi = {
     URL.revokeObjectURL(url);
   },
 };
+
+export interface MatrizPuestoDto {
+  usuarioSAP: string;
+  nombreCompleto?: string;
+  cedula?: string;
+  sociedad?: string;
+  departamento?: string;
+  puesto?: string;
+  email?: string;
+  rol: string;
+  transaccion?: string;
+  inicioValidez?: string;
+  finValidez?: string;
+  ultimoIngreso?: string;
+  fechaRevisionContraloria?: string;
+}
+
+export interface MatrizPuestosResultado {
+  total: number;
+  page: number;
+  pageSize: number;
+  items: MatrizPuestoDto[];
+}
 
 export interface SnapshotEntraIDResultado {
   snapshotId: string;
