@@ -24,9 +24,12 @@ public class HallazgosController : ControllerBase
         [FromQuery] EstadoHallazgo? estado = null,
         [FromQuery] Criticidad? criticidad = null,
         [FromQuery] int? sociedadId = null,
+        [FromQuery] Guid? simulacionId = null,
+        [FromQuery] string? tipoHallazgo = null,
         CancellationToken ct = default)
     {
-        var result = await _mediator.Send(new GetHallazgosQuery(page, pageSize, estado, criticidad, sociedadId), ct);
+        var result = await _mediator.Send(
+            new GetHallazgosQuery(page, pageSize, estado, criticidad, sociedadId, simulacionId, tipoHallazgo), ct);
         return Ok(result);
     }
 

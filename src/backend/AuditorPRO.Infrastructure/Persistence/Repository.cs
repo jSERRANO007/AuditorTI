@@ -80,6 +80,13 @@ public class HallazgoRepository : Repository<Hallazgo>, IHallazgoRepository
         => await _context.Hallazgos
             .Where(h => h.SociedadId == sociedadId)
             .ToListAsync(ct);
+
+    public async Task<IEnumerable<Hallazgo>> GetBySimulacionAsync(Guid simulacionId, CancellationToken ct = default)
+        => await _context.Hallazgos
+            .Where(h => h.SimulacionId == simulacionId)
+            .OrderBy(h => h.TipoHallazgo)
+            .ThenByDescending(h => h.Criticidad)
+            .ToListAsync(ct);
 }
 
 public class BitacoraRepository : IBitacoraRepository

@@ -24,6 +24,7 @@ public interface IHallazgoRepository : IRepository<Hallazgo>
 {
     Task<IEnumerable<Hallazgo>> GetAbiertosAsync(CancellationToken ct = default);
     Task<IEnumerable<Hallazgo>> GetBySociedadAsync(int sociedadId, CancellationToken ct = default);
+    Task<IEnumerable<Hallazgo>> GetBySimulacionAsync(Guid simulacionId, CancellationToken ct = default);
 }
 
 public interface IBitacoraRepository
