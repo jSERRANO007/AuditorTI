@@ -13,7 +13,7 @@ on:
 env:
   DOTNET_VERSION: '10.0.x'
   PROJECT_PATH: 'src/backend/AuditorPRO.Api/AuditorPRO.Api.csproj'
-  SOLUTION_PATH: 'src/backend/AuditorPRO.sln'
+  SOLUTION_PATH: 'src/backend/AuditorPRO.slnx'
 
 jobs:
   build-and-test:
@@ -29,18 +29,17 @@ jobs:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Restore
-        run: dotnet restore ${{ env.SOLUTION_PATH }}
+        run: dotnet restore ${{ env.PROJECT_PATH }}
 
       - name: Build
-        run: dotnet build ${{ env.SOLUTION_PATH }} --no-restore --configuration Release
+        run: dotnet build ${{ env.PROJECT_PATH }} --no-restore --configuration Release
 
       - name: Publish
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           dotnet publish ${{ env.PROJECT_PATH }} \
             --configuration Release \
-            --output ./publish/api \
-            --no-build
+            --output ./publish/api
 
       - name: Upload artifact
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
