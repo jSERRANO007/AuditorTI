@@ -22,15 +22,23 @@ function ModalSociedad({ sociedad, onClose, onSaved }: {
   const [codigo, setCodigo] = useState(sociedad?.codigo ?? '');
   const [nombre, setNombre] = useState(sociedad?.nombre ?? '');
   const [pais,   setPais]   = useState(sociedad?.pais ?? '');
+  const [activa, setActiva] = useState(sociedad?.activa ?? true);
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     try {
-      const res = sociedad
-        ? await api.put(`/sociedades/${sociedad.id}`, { nombre, pais })
-        : await api.post('/sociedades', { codigo, nombre, pais });
+      let res;
+      if (sociedad) {
+        // Actualizar nombre y país
+        res = await api.put(`/sociedades/${sociedad.id}`, { nombre, pais });
+        // Si cambió el estado, hacer toggle
+        if (activa !== sociedad.activa)
+          res = await api.patch(`/sociedades/${sociedad.id}/toggle`);
+      } else {
+        res = await api.post('/sociedades', { codigo, nombre, pais });
+      }
       onSaved(res.data);
       toast.success(sociedad ? 'Sociedad actualizada' : 'Sociedad creada');
       onClose();
@@ -70,6 +78,21 @@ function ModalSociedad({ sociedad, onClose, onSaved }: {
               <option value="">— Seleccionar —</option>
               {PAISES.map(p => <option key={p} value={p}>{p}</option>)}
             </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Estado</label>
+            <div className="flex gap-3">
+              {[true, false].map(val => (
+                <button key={String(val)} type="button" onClick={() => setActiva(val)}
+                  className={`flex-1 py-2 rounded-lg text-sm font-medium border transition ${
+                    activa === val
+                      ? val ? 'bg-green-600 text-white border-green-600' : 'bg-red-500 text-white border-red-500'
+                      : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+                  }`}>
+                  {val ? '✓ Activa' : '✗ Inactiva'}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="flex gap-3 pt-2">
             <button type="submit" disabled={saving}
